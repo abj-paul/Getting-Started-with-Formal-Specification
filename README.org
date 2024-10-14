@@ -1,0 +1,9 @@
+* About
+We first try to understand TLA+ specification language. 
+
+| Topic        | Method                        | Status    |
+|--------------+-------------------------------+-----------|
+| Paxos Commit | ChatGPT Generated Explanation | Completed |
+| Paxos Commit | Update based on Paxos Video#1 | Ongoing   |
+| Paxos Commit | Update based on Paxos Video#2 | -         |
+| Paxos Commit | Update based on Paxos Video#3 | -         |
