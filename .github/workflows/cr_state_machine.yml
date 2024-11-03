@@ -72,7 +72,14 @@ jobs:
     - name: Handle Decline
       if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Decline') && !contains(github.event.issue.labels.*.name, 'Commit') && !contains(github.event.issue.labels.*.name, 'Submit') && !contains(github.event.issue.labels.*.name, 'Closed')
       run: |
-        gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --remove-label "Decline" --add-label "Submit"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --add-label "Decline"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Reopen issue
+      if: contains(github.event.issue.labels.*.name, 'Submit') && contains(github.event.issue.labels.*.name, 'Decline') 
+      run: |
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Decline" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --remove-label "Closed" 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
