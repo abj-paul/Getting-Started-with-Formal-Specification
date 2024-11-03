@@ -1,6 +1,7 @@
-name: CR State Machine
+name: CR Issue State Machine
+
 on:
-  pull_request:
+  issues:
     types: [opened, labeled, unlabeled, closed]
 
 jobs:
@@ -8,61 +9,59 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Transition on PR Open
+    - name: Transition on Issue Open
       if: github.event.action == 'opened'
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --add-label "Submit"
+        gh issue edit ${{ github.event.issue.number }} --add-label "Submit"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Review on Label
-      if: contains(github.event.pull_request.labels.*.name, 'Submit')
+      if: contains(github.event.issue.labels.*.name, 'Submit')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Submit" --add-label "Review"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --add-label "Review"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Analysis on Review Approval
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Review')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Review')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Review" --add-label "Analysis"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Review" --add-label "Analysis"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Commit on Analysis Completion
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Analysis')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Analysis')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Analysis" --add-label "Commit"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Analysis" --add-label "Commit"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Implement on Commit
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Commit')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Commit')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Commit" --add-label "Implement"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Commit" --add-label "Implement"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Verification on Implement
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Implement')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Implement')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Implement" --add-label "Verification"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Implement" --add-label "Verification"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Closed on Verification
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Verification')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Verification')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Verification" --add-label "Closed"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Verification" --add-label "Closed"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Handle Decline
-      if: github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'Decline')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Decline')
       run: |
-        gh pr edit ${{ github.event.pull_request.number }} --remove-label "Verification" --add-label "Closed"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Verification" --add-label "Closed"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
