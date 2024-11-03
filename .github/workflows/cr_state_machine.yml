@@ -3,6 +3,9 @@ name: CR Issue State Machine
 on:
   issues:
     types: [opened, labeled, unlabeled, closed]
+  push:
+    branches:
+      - main  # Adjust to the branch you’re using for the code push
 
 jobs:
   cr_state_machine:
@@ -95,8 +98,9 @@ jobs:
 
   transition_on_push:
     runs-on: ubuntu-latest
-    needs: cr_state_machine
+    # Removed the dependency `needs: cr_state_machine` to allow independent execution on `push`
     if: github.event_name == 'push'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -111,9 +115,14 @@ jobs:
 
       - name: Transition to Verification on Code Push
         run: |
+          # Find the issue with the label "Implement"
           issue_number=$(gh issue list --label "Implement" --json number --jq '.[0].number')
           if [ -n "$issue_number" ]; then
+            # Transition from "Implement" to "Verification"
             gh issue edit "$issue_number" --remove-label "Implement" --add-label "Verification"
+            echo "Transitioned issue #$issue_number from Implement to Verification."
+          else
+            echo "No issue with the 'Implement' label found."
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
