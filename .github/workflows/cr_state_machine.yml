@@ -88,13 +88,20 @@ jobs:
 
     - name: Ensure Only One Label
       run: |
-        labels=($(gh issue view ${{ github.event.issue.number }} --json labels --jq '.labels[].name'))
+        issue_number="${{ github.event.issue.number }}"
+        labels=($(gh issue view "$issue_number" --json labels --jq '.labels[].name'))
+        
+        # Check if there are multiple labels and remove the latest if so
         if [ ${#labels[@]} -gt 1 ]; then
           latest_label="${labels[-1]}"
-          gh issue edit ${{ github.event.issue.number }} --remove-label "$latest_label"
+          gh issue edit "$issue_number" --remove-label "$latest_label"
+          echo "Removed label $latest_label from issue #$issue_number to ensure only one label remains."
+        else
+          echo "Only one label present for issue #$issue_number. No action needed."
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   transition_on_push:
     runs-on: ubuntu-latest
