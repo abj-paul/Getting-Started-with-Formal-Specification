@@ -28,42 +28,42 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Review on Label
-      if: contains(github.event.issue.labels.*.name, 'Submit') && contains(github.event.issue.labels.*.name, 'Review') 
+      if: contains(github.event.issue.labels.*.name, 'Submit')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --remove-label "Closed" --add-label "Review"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Analysis on Review Approval
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Review') && contains(github.event.issue.labels.*.name, 'Analysis') 
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Review')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --remove-label "Closed" --add-label "Analysis"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Commit on Analysis Completion
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Analysis') && contains(github.event.issue.labels.*.name, 'Commit') 
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Analysis')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Implement" --remove-label "Verification" --remove-label "Closed" --add-label "Commit"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Implement on Commit
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Commit') && contains(github.event.issue.labels.*.name, 'Implement') 
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Commit')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Verification" --remove-label "Closed" --add-label "Implement"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Verification on Implement
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Implement') && contains(github.event.issue.labels.*.name, 'Verification') 
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Implement')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Closed" --add-label "Verification"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Transition to Closed on Verification
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Verification') && contains(github.event.issue.labels.*.name, 'Closed') 
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Verification')
       run: |
         gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --add-label "Closed"
       env:
@@ -72,7 +72,7 @@ jobs:
     - name: Handle Decline
       if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'Decline')
       run: |
-        gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --add-label "Decline"
+        gh issue edit ${{ github.event.issue.number }} --remove-label "Submit" --remove-label "Review" --remove-label "Analysis" --remove-label "Commit" --remove-label "Implement" --remove-label "Verification" --add-label "Closed"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
