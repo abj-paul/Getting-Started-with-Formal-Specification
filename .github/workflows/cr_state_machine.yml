@@ -88,9 +88,18 @@ jobs:
 
     - name: Ensure Only One Label
       run: |
+        # Retrieve the issue number from the GitHub event
         issue_number="${{ github.event.issue.number }}"
-        labels=($(gh issue view "$issue_number" --json labels --jq '.labels[].name'))
         
+        # Exit if issue_number is empty
+        if [ -z "$issue_number" ]; then
+          echo "No issue number found. Skipping label check."
+          exit 0
+        fi
+
+        # Get the labels for the issue
+        labels=($(gh issue view "$issue_number" --json labels --jq '.labels[].name'))
+
         # Check if there are multiple labels and remove the latest if so
         if [ ${#labels[@]} -gt 1 ]; then
           latest_label="${labels[-1]}"
@@ -101,6 +110,7 @@ jobs:
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
 
   transition_on_push:
