@@ -1,0 +1,161 @@
+fmod RAMP-DATA is
+  protecting NAT .
+  protecting STRING .
+
+  sorts Key Value Timestamp .
+  subsort String < Key .
+  subsort String < Value .
+  subsort Nat < Timestamp .
+
+  --- A Set of Keys (used for Metadata)
+  sort KeySet .
+  subsort Key < KeySet .
+  op empty : -> KeySet [ctor] .
+  op __ : KeySet KeySet -> KeySet [ctor assoc comm id: empty] .
+
+  --- A Version: < item, value, timestamp, metadata >
+  sort Version .
+  op <_,_,_,_> : Key Value Timestamp KeySet -> Version [ctor] .
+
+  --- Collections of Versions (Server Storage)
+  sort VersionSet .
+  subsort Version < VersionSet .
+  op noVersions : -> VersionSet [ctor] .
+  op __ : VersionSet VersionSet -> VersionSet [ctor assoc comm id: noVersions] .
+
+  --- Map for Latest Commits: Key |-> Timestamp
+  sort CommitMap .
+  op emptyCM : -> CommitMap [ctor] .
+  op _|->_ : Key Timestamp -> CommitMap [ctor] .
+  op _;_ : CommitMap CommitMap -> CommitMap [ctor assoc comm id: emptyCM] .
+
+  --- Helper: lookup timestamp for a key
+  op getTs : Key CommitMap -> Timestamp .
+  op hasKey : Key CommitMap -> Bool .
+
+  var K : Key . var T : Timestamp . var M : CommitMap .
+
+  eq getTs(K, (K |-> T) ; M) = T .
+  eq getTs(K, M) = 0 [owise] .
+
+  eq hasKey(K, (K |-> T) ; M) = true .
+  eq hasKey(K, M) = false [owise] .
+endfm
+
+
+mod RAMP-SYS is
+  protecting RAMP-DATA .
+  protecting CONFIGURATION .
+
+  --- ---------------------------------------------------
+  --- CLASSES
+  --- ---------------------------------------------------
+
+  op Server : -> Cid [ctor] .
+  op versions :_ : VersionSet -> Attribute [ctor] .
+  op latestCommit :_ : CommitMap -> Attribute [ctor] .
+
+  op Client : -> Cid [ctor] .
+  op pendingReads :_ : KeySet -> Attribute [ctor] .
+  op readSet :_ : VersionSet -> Attribute [ctor] .
+  op step :_ : Nat -> Attribute [ctor] .
+
+  --- ---------------------------------------------------
+  --- MESSAGES
+  --- ---------------------------------------------------
+
+  msg prepare : Oid Version -> Msg .
+  msg prepared : Oid Key -> Msg .
+  msg commit : Oid Key Timestamp -> Msg .
+  msg get : Oid Key Timestamp -> Msg .
+  msg response : Oid Version -> Msg .
+
+  vars S C : Oid .
+  vars K : Key .  vars V : Value .
+  vars TS TS_REQ : Nat .
+  vars MD : KeySet .
+  vars VS : VersionSet .
+  vars CM : CommitMap .
+  vars KS : KeySet .
+  vars R_VS : VersionSet .
+
+  --- ---------------------------------------------------
+  --- SERVER-SIDE METHODS
+  --- ---------------------------------------------------
+
+  --- PROCEDURE PREPARE
+  rl [Server-Prepare] :
+     prepare(S, < K, V, TS, MD >)
+     < S : Server | versions : VS, latestCommit : CM >
+     =>
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+     prepared(S, K) .
+
+  --- PROCEDURE COMMIT (update existing)
+  rl [Server-Commit-Update] :
+     commit(S, K, TS)
+     < S : Server | versions : VS, latestCommit : ((K |-> TS_REQ) ; CM) >
+     =>
+     < S : Server | versions : VS, latestCommit : ((K |-> max(TS, TS_REQ)) ; CM) > .
+
+  --- PROCEDURE COMMIT (new key)  *** MUST BE crl ***
+  crl [Server-Commit-New] :
+     commit(S, K, TS)
+     < S : Server | versions : VS, latestCommit : CM >
+     =>
+     < S : Server | versions : VS, latestCommit : ((K |-> TS) ; CM) >
+     if not hasKey(K, CM) .
+
+  --- PROCEDURE GET (latest)  (already crl)
+  crl [Server-Get-Latest] :
+     get(S, K, 0)
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+     =>
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+     response(S, < K, V, TS, MD >)
+     if TS == getTs(K, CM) .
+
+  --- PROCEDURE GET (specific)  *** MUST BE crl ***
+  crl [Server-Get-Specific] :
+     get(S, K, TS_REQ)
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+     =>
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+     response(S, < K, V, TS, MD >)
+     if (TS_REQ > 0) and (TS_REQ == TS) .
+
+  --- ---------------------------------------------------
+  --- CLIENT-SIDE LOGIC
+  --- ---------------------------------------------------
+
+  rl [Client-Recv-Round1] :
+     response(S, < K, V, TS, MD >)
+     < C : Client | pendingReads : (K KS), readSet : R_VS, step : 1 >
+     =>
+     < C : Client | pendingReads : KS,
+                    readSet : (R_VS < K, V, TS, MD >),
+                    step : 1 > .
+
+endm
+
+mod RAMP-SCENARIO is
+  protecting RAMP-SYS .
+
+  ops Px Py C2 : -> Oid .
+  ops x y : -> Key .
+
+  op initState : -> Configuration .
+  eq initState = 
+     < Px : Server | versions : < x, "x1", 1, (x y) >, 
+                     latestCommit : (x |-> 1) >
+     
+     < Py : Server | versions : (< y, "y0", 0, empty > < y, "y1", 1, (x y) >), 
+                     latestCommit : (y |-> 0) >
+     
+     < C2 : Client | pendingReads : (x y), readSet : noVersions, step : 1 >
+     
+     get(Px, x, 0) 
+     get(Py, y, 0) .
+endm
+
+rewrite [10] initState .
