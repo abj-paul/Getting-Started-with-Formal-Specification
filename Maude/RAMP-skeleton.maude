@@ -1,0 +1,659 @@
+*** ============================================================
+
+*** RAMP (Read Atomic Multi-Partition) - FIXED LOGIC
+
+*** ============================================================
+
+
+
+fmod RAMP-DATA is
+
+  protecting NAT .
+
+  protecting STRING .
+
+
+
+  sorts Key Value Timestamp .
+
+  subsort String < Key .
+
+  subsort String < Value .
+
+  subsort Nat < Timestamp .
+
+
+
+  --- ---------------------------------------------------
+
+  --- Keys and Metadata
+
+  --- ---------------------------------------------------
+
+  sort KeySet .
+
+  subsort Key < KeySet .
+
+  op empty : -> KeySet [ctor] .
+
+  op __ : KeySet KeySet -> KeySet [ctor assoc comm id: empty] .
+
+
+
+  op _in_ : Key KeySet -> Bool .
+
+  var K : Key . vars KS1 KS2 : KeySet .
+
+  eq K in (K KS1) = true .
+
+  eq K in KS1 = false [owise] .
+
+
+
+  op _\_ : KeySet KeySet -> KeySet .
+
+  eq empty \ KS2 = empty .
+
+  ceq (K KS1) \ KS2 = KS1 \ KS2 if K in KS2 .
+
+  ceq (K KS1) \ KS2 = K (KS1 \ KS2) if not (K in KS2) .
+
+
+
+  --- ---------------------------------------------------
+
+  --- Versions and KeyValues
+
+  --- ---------------------------------------------------
+
+  sort Version .
+
+  op <_,_,_,_> : Key Value Timestamp KeySet -> Version [ctor] .
+
+
+
+  sort VersionSet .
+
+  subsort Version < VersionSet .
+
+  op noVersions : -> VersionSet [ctor] .
+
+  op __ : VersionSet VersionSet -> VersionSet [ctor assoc comm id: noVersions] .
+
+
+
+  sort KeyValue .
+
+  op <_,_> : Key Value -> KeyValue [ctor] .
+
+  sort KeyValueSet .
+
+  subsort KeyValue < KeyValueSet .
+
+  op emptyKV : -> KeyValueSet [ctor] .
+
+  op __ : KeyValueSet KeyValueSet -> KeyValueSet [ctor assoc comm id: emptyKV] .
+
+
+
+  op getKeys : KeyValueSet -> KeySet .
+
+  var V : Value . var KVS : KeyValueSet .
+
+  eq getKeys(emptyKV) = empty .
+
+  eq getKeys(< K, V > KVS) = K getKeys(KVS) .
+
+
+
+  --- ---------------------------------------------------
+
+  --- Commit Maps
+
+  --- ---------------------------------------------------
+
+  sort CommitMap .
+
+  op emptyCM : -> CommitMap [ctor] .
+
+  op _|->_ : Key Timestamp -> CommitMap [ctor] .
+
+  op _;_ : CommitMap CommitMap -> CommitMap [ctor assoc comm id: emptyCM] .
+
+
+
+  --- FIX: Use Nat for logic variables to allow use of 'max'
+
+  var T : Nat . var M : CommitMap .
+
+
+
+  op getTs : Key CommitMap -> Nat .
+
+  eq getTs(K, (K |-> T) ; M) = T .
+
+  eq getTs(K, M) = 0 [owise] .
+
+
+
+  op hasKey : Key CommitMap -> Bool .
+
+  eq hasKey(K, (K |-> T) ; M) = true .
+
+  eq hasKey(K, M) = false [owise] .
+
+
+
+  --- ---------------------------------------------------
+
+  --- Fracture Detection Logic
+
+  --- ---------------------------------------------------
+
+  op calcLatest : VersionSet -> CommitMap .
+
+  op processMeta : KeySet Nat CommitMap -> CommitMap .
+
+  op updateMax : Key Nat CommitMap -> CommitMap .
+
+
+
+  vars VS : VersionSet . var MD : KeySet .
+
+  var TS_META : Nat .
+
+
+
+  eq calcLatest(noVersions) = emptyCM .
+
+  eq calcLatest(< K, V, T, MD > VS) = processMeta(MD, T, calcLatest(VS)) .
+
+
+
+  --- AC matching handles singletons vs lists automatically
+
+  eq processMeta(empty, T, M) = M .
+
+  eq processMeta(K MD, T, M) = processMeta(MD, T, updateMax(K, T, M)) .
+
+
+
+  --- FIX: T and TS_META are Nat, so max(T, TS_META) works
+
+  eq updateMax(K, T, ((K |-> TS_META) ; M)) = (K |-> max(T, TS_META)) ; M .
+
+  eq updateMax(K, T, M) = (K |-> T) ; M [owise] .
+
+
+
+  op getRepairs : VersionSet CommitMap -> CommitMap .
+
+  eq getRepairs(noVersions, M) = emptyCM .
+
+
+
+  --- FIX: Use Nat for comparison
+
+  ceq getRepairs(< K, V, T, MD > VS, M) 
+
+    = (K |-> getTs(K, M)) ; getRepairs(VS, M)
+
+    if hasKey(K, M) and (getTs(K, M) > T) .
+
+
+
+  ceq getRepairs(< K, V, T, MD > VS, M) 
+
+    = getRepairs(VS, M)
+
+    if not (hasKey(K, M) and (getTs(K, M) > T)) .
+
+
+
+endfm
+
+
+
+mod RAMP-SYS is
+
+  protecting RAMP-DATA .
+
+  protecting CONFIGURATION .
+
+
+
+  op Server : -> Cid [ctor] .
+
+  op versions :_ : VersionSet -> Attribute [ctor] .
+
+  op latestCommit :_ : CommitMap -> Attribute [ctor] .
+
+
+
+  op Client : -> Cid [ctor] .
+
+  op pendingReads :_ : KeySet -> Attribute [ctor] .
+
+  op readSet :_ : VersionSet -> Attribute [ctor] .
+
+  op step :_ : Nat -> Attribute [ctor] .
+
+  op writeSet :_ : KeyValueSet -> Attribute [ctor] .
+
+  op acks :_ : KeySet -> Attribute [ctor] .
+
+  op txTs :_ : Timestamp -> Attribute [ctor] .
+
+
+
+  msg prepare : Oid Version -> Msg .
+
+  msg prepared : Oid Key -> Msg .
+
+  msg commit : Oid Key Timestamp -> Msg .
+
+  msg get : Oid Key Timestamp -> Msg .
+
+  msg response : Oid Version -> Msg .
+
+  msg startPut : Oid KeyValueSet Timestamp -> Msg .
+
+  msg startGet : Oid KeySet -> Msg .
+
+
+
+  op home : Key -> Oid .
+
+  op genPrepares : Oid KeyValueSet Timestamp KeySet -> Configuration .
+
+  op genCommits : Oid KeySet Timestamp -> Configuration .
+
+  op genGets : Oid KeySet -> Configuration .
+
+  op genRepairGets : Oid CommitMap -> Configuration .
+
+  op mapKeys : CommitMap -> KeySet .
+
+  op removeKey : Key VersionSet -> VersionSet .
+
+  op replaceVersion : Version VersionSet -> VersionSet .
+
+
+
+  vars S C : Oid .
+
+  vars K : Key . vars V : Value .
+
+  vars TS TS_REQ : Timestamp .
+
+  vars MD KS_ALL : KeySet .
+
+  vars VS R_VS : VersionSet .
+
+  vars CM REPAIR_MAP : CommitMap .
+
+  vars KS AK PR0 : KeySet .
+
+  vars KVS WS : KeyValueSet .
+
+  vars TTX : Timestamp .
+
+  var VER : Version .
+
+
+
+  --- Generators
+
+  eq genPrepares(C, emptyKV, TS, KS_ALL) = none .
+
+  eq genPrepares(C, < K, V > KVS, TS, KS_ALL) = 
+
+     prepare(home(K), < K, V, TS, (KS_ALL \ K) >) 
+
+     genPrepares(C, KVS, TS, KS_ALL) .
+
+
+
+  eq genCommits(C, empty, TS) = none .
+
+  eq genCommits(C, K KS, TS) = commit(home(K), K, TS) genCommits(C, KS, TS) .
+
+
+
+  eq genGets(C, empty) = none .
+
+  eq genGets(C, K KS) = get(home(K), K, 0) genGets(C, KS) .
+
+
+
+  eq genRepairGets(C, emptyCM) = none .
+
+  eq genRepairGets(C, (K |-> TS) ; CM) = get(home(K), K, TS) genRepairGets(C, CM) .
+
+
+
+  eq mapKeys(emptyCM) = empty .
+
+  eq mapKeys((K |-> TS) ; CM) = K mapKeys(CM) .
+
+
+
+  eq removeKey(K, noVersions) = noVersions .
+
+  eq removeKey(K, < K, V, TS, MD > VS) = removeKey(K, VS) .
+
+  eq removeKey(K, VER VS) = VER removeKey(K, VS) [owise] .
+
+
+
+  eq replaceVersion(< K, V, TS, MD >, VS) = < K, V, TS, MD > removeKey(K, VS) .
+
+
+
+  --- Rules
+
+  rl [Server-Prepare] :
+
+     prepare(S, < K, V, TS, MD >)
+
+     < S : Server | versions : VS, latestCommit : CM >
+
+     =>
+
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+
+     prepared(S, K) .
+
+
+
+  rl [Server-Commit-Update] :
+
+     commit(S, K, TS)
+
+     < S : Server | versions : VS, latestCommit : ((K |-> TS_REQ) ; CM) >
+
+     =>
+
+     < S : Server | versions : VS, latestCommit : ((K |-> max(TS, TS_REQ)) ; CM) > .
+
+
+
+  crl [Server-Commit-New] :
+
+     commit(S, K, TS)
+
+     < S : Server | versions : VS, latestCommit : CM >
+
+     =>
+
+     < S : Server | versions : VS, latestCommit : ((K |-> TS) ; CM) >
+
+     if not hasKey(K, CM) .
+
+
+
+  crl [Server-Get-Latest] :
+
+     get(S, K, 0)
+
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+
+     =>
+
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+
+     response(S, < K, V, TS, MD >)
+
+     if TS == getTs(K, CM) .
+
+
+
+  crl [Server-Get-Specific] :
+
+     get(S, K, TS_REQ)
+
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+
+     =>
+
+     < S : Server | versions : (VS < K, V, TS, MD >), latestCommit : CM >
+
+     response(S, < K, V, TS, MD >)
+
+     if (TS_REQ > 0) and (TS_REQ == TS) .
+
+
+
+  --- Client PUT (Included for completeness)
+
+  rl [Client-Start-Put] :
+
+     startPut(C, KVS, TS)
+
+     < C : Client | step : 0, pendingReads : PR0, readSet : R_VS, 
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     =>
+
+     < C : Client | step : 1, pendingReads : PR0, readSet : R_VS,
+
+                    writeSet : KVS, acks : empty, txTs : TS >
+
+     genPrepares(C, KVS, TS, getKeys(KVS)) .
+
+
+
+  rl [Client-Recv-Prepared] :
+
+     prepared(S, K)
+
+     < C : Client | step : 1, acks : AK >
+
+     =>
+
+     < C : Client | step : 1, acks : (K AK) > .
+
+
+
+  crl [Client-Commit] :
+
+     < C : Client | step : 1, writeSet : KVS, acks : AK, txTs : TS >
+
+     =>
+
+     < C : Client | step : 0, writeSet : emptyKV, acks : empty, txTs : 0 >
+
+     genCommits(C, AK, TS)
+
+     if getKeys(KVS) == AK .
+
+
+
+  --- Client GET (The RAMP Logic)
+
+  rl [Client-Start-Get] :
+
+     startGet(C, KS)
+
+     < C : Client | step : 0, pendingReads : PR0, readSet : R_VS,
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     =>
+
+     < C : Client | step : 1, pendingReads : KS, readSet : noVersions,
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     genGets(C, KS) .
+
+
+
+  rl [Client-Recv-Round1] :
+
+     response(S, < K, V, TS, MD >)
+
+     < C : Client | step : 1, pendingReads : (K KS), readSet : R_VS,
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     =>
+
+     < C : Client | step : 1, pendingReads : KS, readSet : (R_VS < K, V, TS, MD >),
+
+                    writeSet : WS, acks : AK, txTs : TTX > .
+
+
+
+  --- RAMP FRACTURE CHECK
+
+  crl [Client-No-Fractures] :
+
+      < C : Client | step : 1, pendingReads : empty, readSet : R_VS,
+
+                     writeSet : WS, acks : AK, txTs : TTX >
+
+      =>
+
+      < C : Client | step : 0, pendingReads : empty, readSet : R_VS,
+
+                     writeSet : WS, acks : AK, txTs : TTX >
+
+      if REPAIR_MAP := getRepairs(R_VS, calcLatest(R_VS)) 
+
+      /\ REPAIR_MAP == emptyCM .
+
+
+
+  crl [Client-Do-Repairs] :
+
+      < C : Client | step : 1, pendingReads : empty, readSet : R_VS,
+
+                     writeSet : WS, acks : AK, txTs : TTX >
+
+      =>
+
+      < C : Client | step : 2, pendingReads : mapKeys(REPAIR_MAP), readSet : R_VS,
+
+                     writeSet : WS, acks : AK, txTs : TTX >
+
+      genRepairGets(C, REPAIR_MAP)
+
+      if REPAIR_MAP := getRepairs(R_VS, calcLatest(R_VS)) 
+
+      /\ REPAIR_MAP =/= emptyCM .
+
+
+
+  rl [Client-Recv-Round2] :
+
+     response(S, < K, V, TS, MD >)
+
+     < C : Client | step : 2, pendingReads : (K KS), readSet : R_VS,
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     =>
+
+     < C : Client | step : 2, pendingReads : KS, 
+
+                    readSet : replaceVersion(< K, V, TS, MD >, R_VS),
+
+                    writeSet : WS, acks : AK, txTs : TTX > .
+
+
+
+  rl [Client-Finish-Round2] :
+
+     < C : Client | step : 2, pendingReads : empty, readSet : R_VS,
+
+                    writeSet : WS, acks : AK, txTs : TTX >
+
+     =>
+
+     < C : Client | step : 0, pendingReads : empty, readSet : R_VS,
+
+                    writeSet : WS, acks : AK, txTs : TTX > .
+
+
+
+endm
+
+
+
+mod RAMP-SCENARIO is
+
+  protecting RAMP-SYS .
+
+
+  ops Px Py C2 : -> Oid .
+
+
+  ops x y : -> Key .
+
+
+
+
+
+
+
+
+  eq home(x) = Px .
+
+  eq home(y) = Py .
+
+
+
+  op initState : -> Configuration .
+
+  eq initState = 
+
+
+     < Px : Server | versions : < x, "x1", 1, (x y) >, 
+
+
+                     latestCommit : (x |-> 1) >
+
+
+     < Py : Server | versions : (< y, "y0", 0, empty > < y, "y1", 1, (x y) >), 
+
+
+
+
+
+                     latestCommit : (y |-> 0) >
+
+
+     < C2 : Client | pendingReads : empty, readSet : noVersions, 
+
+
+                     step : 0, writeSet : emptyKV, acks : empty, txTs : 0 >
+
+
+     startGet(C2, x y) .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+endm
+
+
+
+
+rewrite [100] initState .
