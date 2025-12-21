@@ -292,21 +292,48 @@ endm
 
 mod RAMP-SCENARIO is
   protecting RAMP-SYS .
-  ops Px Py C2 : -> Oid .
-  ops x y : -> Key .
 
+  ops Px Py : -> Oid .       --- Server IDs
+  ops Writer Reader : -> Oid . --- Client IDs
+  ops x y : -> Key .         --- Keys
+
+  --- Routing Table
   eq home(x) = Px .
   eq home(y) = Py .
 
   op initState : -> Configuration .
   eq initState = 
-     < Px : Server | versions : < x, "x1", 1, (x y) >, 
-                     latestCommit : (x |-> 1) >
-     < Py : Server | versions : (< y, "y0", 0, empty > < y, "y1", 1, (x y) >), 
+     --- ---------------------------------------------------
+     --- 1. SERVERS (Initialized with "Item 0" at TS 0)
+     --- ---------------------------------------------------
+     < Px : Server | versions : < x, "x0", 0, empty >, 
+                     latestCommit : (x |-> 0) >
+     
+     < Py : Server | versions : < y, "y0", 0, empty >, 
                      latestCommit : (y |-> 0) >
-     < C2 : Client | pendingReads : empty, readSet : noVersions, 
-                     step : 0, writeSet : emptyKV, acks : empty, txTs : 0 >
-     startGet(C2, x y) .
+     
+     --- ---------------------------------------------------
+     --- 2. WRITER CLIENT (Performs PUT_ALL)
+     --- Matches Algorithm 1 lines 14-21
+     --- ---------------------------------------------------
+     < Writer : Client | step : 0, pendingReads : empty, readSet : noVersions, 
+                         writeSet : emptyKV, acks : empty, txTs : 0 >
+     
+     --- Command: PUT x="x1", y="y1" with Timestamp 1
+     startPut(Writer, < x, "x1" > < y, "y1" >, 1) 
+
+     --- ---------------------------------------------------
+     --- 3. READER CLIENT (Performs GET_ALL)
+     --- Matches Algorithm 1 lines 22-33
+     --- ---------------------------------------------------
+     < Reader : Client | step : 0, pendingReads : empty, readSet : noVersions, 
+                         writeSet : emptyKV, acks : empty, txTs : 0 >
+     
+     --- Command: GET x, y
+     startGet(Reader, x y) .
+
 endm
 
-rewrite [100] initState .
+search [1] initState =>* < Reader : Client | readSet : (< x, "x1", 1, MD1:KeySet > < y, "y1", 1, MD2:KeySet >), 
+                      step : 0, pendingReads : empty, writeSet : emptyKV, acks : empty, txTs : 0 > 
+  C:Configuration .
