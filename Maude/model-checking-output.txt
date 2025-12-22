@@ -1,0 +1,10 @@
+rewrite [100] in RAMP-SCENARIO : initState .
+rewrites: 85 in 1ms cpu (0ms real) (85000 rewrites/second)
+result Configuration: < Px : Server | versions : (< x,"",0,empty > < x,"x1",1,x y >),latestCommit : (x |-> 1) > < Py : Server | versions : (< y,"",0,empty > < y,"y1",1,x y >),latestCommit :
+    emptyCM > < Reader : Client | pendingReads : empty,readSet : (< x,"x1",1,x y > < y,"y1",1,x y >),step : 0,writeSet : emptyKV,acks : empty,txTs : 0 >
+==========================================
+mod RAMP-CHECK
+==========================================
+reduce in RAMP-CHECK : modelCheck(initState, []~ fracture) .
+rewrites: 207 in 1ms cpu (1ms real) (207000 rewrites/second)
+result Bool: true
